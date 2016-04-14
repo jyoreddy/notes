@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Run">
+
+	<!--<Import Project="C:\Program Files\MSBuild\MSBuildCommunityTasks\MSBuild.Community.Tasks.Targets"/>-->
+	<!--<UsingTask TaskName="MergeConfig" AssemblyFile="MergeConfigTask.dll" />-->
+
+	<PropertyGroup>
+		<OutputFolder>./Output/</OutputFolder>
+		<Configuration Condition=" '$(Configuration)'=='' ">Debug</Configuration>
+		
+		<ProjectName Condition=" '$(ProjectName)'=='' ">HeadStartVMS</ProjectName>
+		<ProjectFolder Condition=" '$(ProjectFolder)'=='' ">$(ProjectName)</ProjectFolder>
+		<!-- Location for build output of the project -->
+		<OutputRoot Condition=" '$(OutputRoot)'=='' ">$(MSBuildThisFileDirectory)Output\</OutputRoot>
+		<ConfigRoot Condition=" '$(ConfigRoot)'=='' ">$(MSBuildThisFileDirectory)Config\$(ProjectName)\</ConfigRoot>
+		<PublishFolder Condition=" '$(PublishFolder)'=='' ">$(OutputRoot)$(CodeBranch)_$(ProjectName)\</PublishFolder>
+			
+		<DeploymentRoot Condition=" '$(DeploymentRoot)'=='' ">$(MSBuildThisFileDirectory)Deploy\</DeploymentRoot>
+		<CodeBranch Condition=" '$(CodeBranch)'=='' ">master</CodeBranch>
+		<DeploymentFolder Condition=" '$(DeploymentFolder)'=='' ">$(DeploymentRoot)$(CodeBranch)_$(ProjectName)\</DeploymentFolder>
+		
+		<CompilationDebug />
+		<CustomErrorsMode />
+		<ContentEditorsEmail />
+		<AdministratorsEmail />
+	</PropertyGroup>
+	
+	<PropertyGroup Condition="$(ProjectFolder) == 'Tasks'">
+		<ConfigRoot>$(MSBuildThisFileDirectory)Config\Core.Tasks\</ConfigRoot>
+		<DeploymentFolder>$(DeploymentRoot)dev_Tasks\</DeploymentFolder>
+	</PropertyGroup>
+	
+	<PropertyGroup Condition="$(Environment) == 'Test'">
+		<DeploymentFolder>C:\Temp\BuildDemoSite\Test</DeploymentFolder>
+		<VirtualDirectory>BuildDemoTest</VirtualDirectory>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="$(Environment) == 'Live'">
+		<DeploymentFolder>C:\Temp\BuildDemoSite\Live</DeploymentFolder>
+		<VirtualDirectory>BuildDemoLive</VirtualDirectory>
+	</PropertyGroup>
+
+	<Target Name="Run">
+		<CallTarget Targets="GetMSBuildProjectParentDirectory" />
+		<CallTarget Targets="Clean" />
+		<CallTarget Targets="CreateDirectories" />
+		<CallTarget Targets="Compile" />
+		<CallTarget Targets="Publish" />
+		<!-- CallTarget Targets="MergeConfig" / -->
+		<CallTarget Targets="Deploy" />
+	</Target>
+	<Target Name="GetMSBuildProjectParentDirectory">
+		<!-- First you create the MSBuildProject Parent directory Item -->
+		<CreateItem Include="$(MSBuildProjectDirectory)\..\">
+			<Output ItemName="MSBuildProjectParentDirectory" TaskParameter="Include"/>
+		</CreateItem>
+
+		<!-- You can now retrieve its fullpath using Fullpath metadata -->
+		<Message Text="%(MSBuildProjectParentDirectory.Fullpath)"/>
+
+		<!-- Create a property based on parent fullpath-->
+		<CreateProperty Value="%(MSBuildProjectParentDirectory.Fullpath)">
+			<Output PropertyName="CodeFolder" TaskParameter="Value"/>
+		</CreateProperty>
+		
+		<CreateProperty Value="$(CodeFolder)$(ProjectFolder)\$(ProjectName).csproj">
+			<Output PropertyName="ProjectFileName" TaskParameter="Value"/>
+		</CreateProperty>		
+	</Target>
+	<Target Name="CreateDirectories">
+        <MakeDir Condition="!Exists('$(OutputRoot)')" Directories="$(OutputRoot)"/>
+		<MakeDir Condition="!Exists('$(PublishFolder)')" Directories="$(PublishFolder)"/>
+		<MakeDir Condition="!Exists('$(DeploymentFolder)')" Directories="$(DeploymentFolder)"/>
+		<Message Text="Created folders"/>
+    </Target>
+	
+	<Target Name="Clean">
+		<!--<ItemGroup><BinFiles Include="bin\*.*" /></ItemGroup>-->
+		<Message Text="Build params: ProjectName- $(ProjectName), ProjectFolder- $(ProjectFolder) "/>
+		<Message Text="Build params: ProjectFileName- $(ProjectFileName), DeploymentFolder- $(DeploymentFolder) "/>
+		<Message Text="Build params: PublishFolder- $(PublishFolder), MSBuildThisFileDirectory- $(MSBuildThisFileDirectory) "/>
+		<!--<Delete Files="@(BinFiles)" />-->
+	</Target>
+
+	<Target Name="Compile" DependsOnTargets="Clean">
+		<Message Text="Compile started"/>
+		<MSBuild Projects="$(ProjectFileName)" />
+		<Message Text="Compile ended"/>
+	</Target>
+
+	<Target Name="Publish">
+		<Message Text="Publish started"/>
+		<RemoveDir Directories="$(PublishFolder)" ContinueOnError="true" />
+		<MakeDir Condition="!Exists('$(PublishFolder)')" Directories="$(PublishFolder)"/>		
+		<MSBuild Projects="$(ProjectFileName)"
+             Targets="ResolveReferences;_CopyWebApplication"
+             Properties="WebProjectOutputDir=$(PublishFolder);OutDir=$(WebProjectOutputDir)\" />
+		<Message Text="Publish ended"/>
+	</Target>
+
+	<Target Name="MergeConfig">
+		<MergeConfig SourceConfigFilename="$(Environment).config"
+                 TargetConfigFilename="$(DeploymentFolder)\Web.config" />
+	</Target>
+
+	<Target Name="Deploy">
+		<Message Text="Deploy started"/>
+		
+		<ItemGroup>
+			<DeploymentFiles Include="$(PublishFolder)\**\*.*" Exclude="$(PublishFolder)\**\*.config"/>
+		</ItemGroup>
+		<!--<Exec Command="xcopy.exe @(DeploymentFiles) @(DeploymentFolder) /e /EXCLUDE:*.config" />-->
+		<Copy SourceFiles="@(DeploymentFiles)"
+          DestinationFolder="$(DeploymentFolder)\%(RecursiveDir)" />
+		<!-- WebDirectoryDelete VirtualDirectoryName="$(VirtualDirectory)"
+                        ContinueOnError="true" / -->
+		<!-- WebDirectoryCreate VirtualDirectoryName="$(VirtualDirectory)"
+                        VirtualDirectoryPhysicalPath="$(DeploymentFolder)" / -->
+		<Message Text="Copying config"/>
+		<!--<Copy SourceFiles="$(ConfigRoot)web.config" DestinationFolder="$(DeploymentFolder)" />-->
+		<Message Text="Copying config done"/>  
+		<Message Text="Deploy ended"/>
+	</Target>
+
+</Project>
